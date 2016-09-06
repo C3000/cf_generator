@@ -6,21 +6,47 @@
  * @version   1.0
  * @since     21.08.16
  */
-class cf_generator
+class cf_generator__cf_command extends cf_generator__cf_command_parent
 {
 
-    protected $aTypes;
-
-
-    public function __construct($sModule, $sClass = null)
+    public function configure()
     {
+        parent::configure();
+        $this->addCommand('generator', new cf_generator__cf_command_command());
+    }
+}
+
+class cf_generator__cf_command_command extends cf_command
+{
+
+    public function execute()
+    {
+        $sModule = $this->getArgument(0);
+        $sClass = $this->getArgument(1);
+
         if (!isset($sClass)) {
             $this->generateModule($sModule);
         }
+        else if (substr($sClass, -4) === '.tpl') {
+            $this->generateTpl($sModule, $sClass);
+        }
         else {
-            $this->loadTypes();
-            $sType = $this->getType($sClass);
-            $this->generateType($sType, $sModule, $sClass);
+            $oOxidDataProvider = oxRegistry::get('cf_oxid_data_provider');
+            $oOxidDataProvider->loadTypes();
+            $sType = $oOxidDataProvider->getType($sClass);
+            if (isset($sType)) {
+                $this->generateType($sType, $sModule, $sClass);
+            }
+            else {
+                $oOxidDataProvider->loadBlocks();
+                $sBlockPath = $oOxidDataProvider->getBlockPath($sClass);
+                if (isset($sBlockPath)) {
+                    $this->generateBlock($sBlockPath, $sModule, $sClass);
+                }
+                else {
+                    $this->debug("No matching file found.");
+                }
+            }
         }
     }
 
@@ -28,7 +54,7 @@ class cf_generator
     protected function generateModule($sModule)
     {
         $blResult = false;
-        $sModulePath = getShopBasePath() . "modules/$sModule";
+        $sModulePath = $this->getModulePath($sModule);
         if (!file_exists($sModulePath)) {
             mkdir($sModulePath);
             $this->writeFile($sModulePath . "/metadata.php", $this->getMetaDataContent($sModule));
@@ -46,39 +72,79 @@ class cf_generator
      */
     protected function generateType($sType, $sModule, $sClass)
     {
-        $sModulePath = getShopBasePath() . "modules/$sModule";
+        $this->checkModule($sModule);
 
-        if ($this->checkModule($sModule)) {
+        $sTypePath = $this->getModulePath($sModule) . "/$sType";
 
-            $sTypePath = $sModulePath . "/$sType";
+        if (!file_exists($sTypePath)) {
+            mkdir($sTypePath, 0777, true);
+        }
 
-            if (!file_exists($sTypePath)) {
-                mkdir($sTypePath, 0777, true);
-            }
-
-            if (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) {
-                $sFilePath = $sTypePath . "/{$sModule}__{$sClass}.php";
+        if (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) {
+            $sFilePath = $sTypePath . "/{$sModule}__{$sClass}.php";
+            if (!file_exists($sFilePath)) {
                 $sContent = $this->getClassContent($sModule, $sClass);
                 $this->writeFile($sFilePath, $sContent);
-                $this->updateMetadata($sType, $sModule, $sClass);
+                $this->updateMetadataAddType($sType, $sModule, $sClass);
             }
             else {
-                die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+                die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
             }
         }
         else {
-            die("Modulpfad existiert nicht oder ist nicht schreibbar: $sModulePath" . PHP_EOL);
+            die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+        }
+    }
+
+
+    protected function generateBlock($sBlockPath, $sModule, $sBlock)
+    {
+        $this->checkModule($sModule);
+
+        $sTypePath = $this->getModulePath($sModule) . "/views/blocks";
+
+        if (!file_exists($sTypePath)) {
+            mkdir($sTypePath, 0777, true);
+        }
+
+        if (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) {
+            $sFilePath = $sTypePath . "/$sBlock.tpl";
+            if (!file_exists($sFilePath)) {
+                $sContent = $this->getBlockContent();
+                $this->writeFile($sFilePath, $sContent);
+                $this->updateMetadataAddBlock($sBlockPath, $sModule, $sBlock);
+            }
+            else {
+                die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
+            }
+        }
+        else {
+            die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+        }
+    }
+
+
+    protected function generateTpl($sModule, $sClass)
+    {
+        $this->checkModule($sModule);
+
+        $sTypePath = $this->getModulePath($sModule) . "/$sClass";
+
+        if (!file_exists($sTypePath)) {
+            mkdir($sTypePath, 0777, true);
         }
     }
 
 
     protected function checkModule($sModule)
     {
-        $sModulePath = getShopBasePath() . "modules/$sModule";
+        $sModulePath = $this->getModulePath($sModule);
 
         $this->generateModule($sModule);
 
-        return file_exists($sModulePath) && is_dir($sModulePath) && is_writable($sModulePath);
+        if (!(file_exists($sModulePath) && is_dir($sModulePath) && is_writable($sModulePath))) {
+            die("Modulpfad existiert nicht oder ist nicht schreibbar: $sModulePath" . PHP_EOL);
+        }
     }
 
 
@@ -180,7 +246,7 @@ HEREDOC;
     }
 
 
-    protected function updateMetadata($sType, $sModule, $sClass)
+    protected function updateMetadataAddType($sType, $sModule, $sClass)
     {
         $sMetadataPath = getShopBasePath() . "modules/$sModule/metadata.php";
         $aModule = array();
@@ -189,6 +255,24 @@ HEREDOC;
         if (!isset($aModule['extend'][$sClass])) {
             $aModule['extend'][$sClass] = "$sModule/$sType/{$sModule}__{$sClass}";
         }
+        $sContent = "<?php" . PHP_EOL;
+        $sContent .= $this->getSignatureContent($sModule) . PHP_EOL . PHP_EOL;
+        $sContent .= $this->getMetadataContentUpdate($sMetadataVersion, $aModule);
+        $this->writeFile($sMetadataPath, $sContent);
+    }
+
+
+    protected function updateMetadataAddBlock($sBlockPath, $sModule, $sBlock)
+    {
+        $sMetadataPath = getShopBasePath() . "modules/$sModule/metadata.php";
+        $aModule = array();
+        $sMetadataVersion = 0;
+        include $sMetadataPath;
+        $aModule['blocks'][] = array(
+            'template' => $sBlockPath,
+            'block' => $sBlock,
+            'file' => "views/blocks/$sBlock.tpl"
+        );
         $sContent = "<?php" . PHP_EOL;
         $sContent .= $this->getSignatureContent($sModule) . PHP_EOL . PHP_EOL;
         $sContent .= $this->getMetadataContentUpdate($sMetadataVersion, $aModule);
@@ -209,7 +293,7 @@ HEREDOC;
                     $sContent .= $this->writeExtendMetadataArray($oModule);
                 }
                 else {
-                    $sContent .= $this->writeMetadataArray($oModule);
+                    $sContent .= $this->writeMetadataArray($oModule, 2);
                 }
                 $sContent .= "\t)," . PHP_EOL;
             }
@@ -225,17 +309,21 @@ HEREDOC;
     }
 
 
-    protected function writeMetadataArray($aModule, $sContent = '')
+    protected function writeMetadataArray($aModule, $dLevel = 1)
     {
+        $sContent = '';
         foreach ($aModule as $sKey => $oModule) {
+            $sTabs = str_repeat("\t", $dLevel);
             if (is_array($oModule)) {
-                $sContent .= "\t" . $this->writeMetadataArray($oModule, $sContent);
+                $sContent .= "{$sTabs}array(" . PHP_EOL;
+                $sContent .= $this->writeMetadataArray($oModule, $dLevel + 1);
+                $sContent .= "{$sTabs})," . PHP_EOL;
             }
             else {
                 $dMax = strlen(array_reduce(array_keys($aModule), function ($k, $v) {
                     return (strlen($k) > strlen($v)) ? $k : $v;
                 }));
-                $sContent .= "\t\t'$sKey'";
+                $sContent .= "{$sTabs}\t'$sKey'";
                 $sContent .= $this->addTabs(strlen($sKey), round(($dMax - 2) / 4));
                 $sContent .= "=>\t'$oModule'," . PHP_EOL;
             }
@@ -268,9 +356,11 @@ HEREDOC;
 
     protected function getSortedExtendArray($aModule)
     {
+        $oOxidDataGenerator = oxRegistry::get('cf_oxid_data_provider');
         $aResult = array();
         foreach ($aModule as $sClass => $sPath) {
-            $aResult[$this->aTypes[$sClass]][$sClass] = $sPath;
+            $sType = $oOxidDataGenerator->getType($sClass);
+            $aResult[$sType][$sClass] = $sPath;
         }
 
         return $aResult;
@@ -306,57 +396,6 @@ HEREDOC;
  * @since $sNow
  */
 HEREDOC;
-    }
-
-
-    protected function getType(&$sClass)
-    {
-        if (isset($this->aTypes[$sClass])) {
-            $sResult = $this->aTypes[$sClass];
-        }
-        else {
-            $aKeys = array_keys($this->aTypes);
-            $aResult = array_filter($aKeys, function ($element) use ($sClass) {
-                return preg_match('/^' . $sClass . '.*/', $element);
-            });
-            $dCount = count($aResult);
-            if ($dCount == 1) {
-                $sClass = current($aResult);
-                $sResult = $this->aTypes[$sClass];
-            }
-            else if ($dCount == 0) {
-                die('Kein Typ gefunden' . PHP_EOL);
-            }
-            else {
-                die('Der Typ ist nicht eindeutig: ' . implode($aResult, ', ') . PHP_EOL);
-            }
-        }
-
-        return $sResult;
-    }
-
-
-    protected function loadTypes()
-    {
-        $this->aTypes = $this->getClasses($this->aTypes, getShopBasePath() . "application");
-        $this->aTypes = $this->getClasses($this->aTypes, getShopBasePath() . "core", "core");
-    }
-
-
-    protected function getClasses($aTypes, $sPath, $sType = "")
-    {
-        $aClasses = scandir($sPath);
-        foreach ($aClasses as $sClass) {
-            if (substr($sClass, -4) == '.php') {
-                $aTypes[substr($sClass, 0, -4)] = $sType;
-            }
-            else if ($sClass != '.' && $sClass != '..' && $sClass != 'views' && $sClass != 'translations' && is_dir($sPath . '/' . $sClass)) {
-                $sNewType = strlen($sType) == 0 ? $sClass : $sType . "/" . $sClass;
-                $aTypes = $this->getClasses($aTypes, $sPath . '/' . $sClass, $sNewType);
-            }
-        }
-
-        return $aTypes;
     }
 
 
@@ -397,6 +436,7 @@ HEREDOC;
         return $this->getModuleSignaturLine('email', 'cf_generator_signature_mail');
     }
 
+
     /**
      * @return null|string
      */
@@ -406,6 +446,7 @@ HEREDOC;
         if ($sDescription) {
             $sDescription = ' * ' . $sDescription . PHP_EOL . ' *' . PHP_EOL;
         }
+
         return $sDescription;
     }
 
@@ -438,19 +479,44 @@ HEREDOC;
         return $this->getSignatureLine('author', 'cf_generator_signature_author');
     }
 
+
     protected function getSignatureLine($sName, $sConfigName)
     {
         $sLine = $this->getParameter($sConfigName);
         if ($sLine) {
-            $sLine = " * @$sName $sLine" .PHP_EOL;
+            $sLine = " * @$sName $sLine" . PHP_EOL;
         }
 
         return $sLine;
     }
 
 
-    public function getParameter($sParamName)
+    protected function getParameter($sParamName)
     {
         return oxRegistry::getConfig()->getConfigParam($sParamName);
+    }
+
+
+    /**
+     * @param $sModule
+     *
+     * @return string
+     */
+    protected function getModulePath($sModule)
+    {
+        $sModulePath = getShopBasePath() . "modules/$sModule";
+
+        return $sModulePath;
+    }
+
+
+    /**
+     * @return string
+     */
+    protected function getBlockContent()
+    {
+        return <<<HEREDOC
+[{\$smarty.block.parent}]
+HEREDOC;
     }
 }

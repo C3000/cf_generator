@@ -54,6 +54,10 @@ $sSignature
 
 require_once dirname(__FILE__) . "/../bootstrap.php";
 
+\$oCommand = oxNew('cf_command');
+\$oCommand->run();
+
+/*
 \$aArgs = \$argv;
 // remove cmd name
 array_shift(\$aArgs);
@@ -65,6 +69,7 @@ if (count(\$aArgs) > 0) {
 else {
     die('Zu wenig Argumente' . PHP_EOL);
 }
+*/
 HEREDOC;
     }
 
