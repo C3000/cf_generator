@@ -30,6 +30,9 @@ class cf_generator__cf_command_command extends cf_command
         else if (substr($sClass, -4) === '.tpl') {
             $this->generateTpl($sModule, $sClass);
         }
+        else if (substr($sClass, -4) === '.php') {
+            $this->generateCustomFile($sModule, $sClass);
+        }
         else {
             $oOxidDataProvider = oxRegistry::get('cf_oxid_data_provider');
             $oOxidDataProvider->loadTypes();
@@ -57,7 +60,7 @@ class cf_generator__cf_command_command extends cf_command
         $sModulePath = $this->getModulePath($sModule);
         if (!file_exists($sModulePath)) {
             mkdir($sModulePath);
-            $this->writeFile($sModulePath . "/metadata.php", $this->getMetaDataContent($sModule));
+            $this->writeFile($this->getMetadataPath($sModulePath), $this->getMetaDataContent($sModule));
             $blResult = true;
         }
 
@@ -76,23 +79,15 @@ class cf_generator__cf_command_command extends cf_command
 
         $sTypePath = $this->getModulePath($sModule) . "/$sType";
 
-        if (!file_exists($sTypePath)) {
-            mkdir($sTypePath, 0777, true);
-        }
+        $this->createDirs($sTypePath);
 
-        if (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) {
+        if ($this->validFilePath($sTypePath)) {
             $sFilePath = $sTypePath . "/{$sModule}__{$sClass}.php";
-            if (!file_exists($sFilePath)) {
+            if ($this->fileExists($sFilePath)) {
                 $sContent = $this->getClassContent($sModule, $sClass);
                 $this->writeFile($sFilePath, $sContent);
                 $this->updateMetadataAddType($sType, $sModule, $sClass);
             }
-            else {
-                die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
-            }
-        }
-        else {
-            die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
         }
     }
 
@@ -103,36 +98,71 @@ class cf_generator__cf_command_command extends cf_command
 
         $sTypePath = $this->getModulePath($sModule) . "/views/blocks";
 
-        if (!file_exists($sTypePath)) {
-            mkdir($sTypePath, 0777, true);
-        }
+        $this->createDirs($sTypePath);
 
-        if (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) {
+        if ($this->validFilePath($sTypePath)) {
             $sFilePath = $sTypePath . "/$sBlock.tpl";
-            if (!file_exists($sFilePath)) {
+            if ($this->fileExists($sFilePath)) {
                 $sContent = $this->getBlockContent();
                 $this->writeFile($sFilePath, $sContent);
                 $this->updateMetadataAddBlock($sBlockPath, $sModule, $sBlock);
             }
-            else {
-                die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
-            }
-        }
-        else {
-            die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
         }
     }
 
 
-    protected function generateTpl($sModule, $sClass)
+    protected function generateTpl($sModule, $sTemplatePath)
     {
         $this->checkModule($sModule);
 
-        $sTypePath = $this->getModulePath($sModule) . "/$sClass";
-
-        if (!file_exists($sTypePath)) {
-            mkdir($sTypePath, 0777, true);
+        $sTypePath = $this->getModulePath($sModule) . "/views/";
+        if (strpos($sTemplatePath, 'admin/') !== 0 || strpos($sTemplatePath, '/admin/') === false) {
+            $sTypePath .= "tpl/";
         }
+
+        $sTemplate = basename($sTemplatePath);
+        $sTypePath .= substr($sTemplatePath, 0, -1 * strlen($sTemplate));
+
+        $this->createDirs($sTypePath);
+
+        if ($this->validFilePath($sTypePath)) {
+            $sFilePath = $sTypePath . "$sTemplate";
+            if ($this->fileExists($sFilePath)) {
+                $sContent = $this->getTemplateContent();
+                $this->writeFile($sFilePath, $sContent);
+                $this->updateMetadataAddTemplate($sModule, $sFilePath);
+            }
+        }
+    }
+
+
+    protected function generateCustomFile($sModule, $sClassPath)
+    {
+        $this->checkModule($sModule);
+
+        $sClass = basename($sClassPath);
+        $sClassPath = substr($sClassPath, 0, -1 * strlen($sClass));
+        $sTypePath = $this->getModulePath($sModule) . "/$sClassPath";
+
+        $this->createDirs($sTypePath);
+
+        if ($this->validFilePath($sTypePath)) {
+            $sFilePath = $sTypePath . "{$sModule}_{$sClass}";
+            if ($this->fileExists($sFilePath)) {
+                $sContent = $this->getFileContent($sModule, $sClass);
+                $this->writeFile($sFilePath, $sContent);
+                $this->updateMetadataAddFile($sModule, $sFilePath);
+            }
+        }
+    }
+
+    protected function validFilePath($sTypePath){
+        return (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) || die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+    }
+
+
+    protected function fileExists($sFilePath) {
+        return !file_exists($sFilePath) || die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
     }
 
 
@@ -156,123 +186,60 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
-    /**
-     * @param $sModule
-     * @param $sClass
-     *
-     * @return string
-     */
-    protected function getClassContent($sModule, $sClass)
-    {
-        $sSignature = $this->getSignatureContent($sModule);
-        $sContent = <<<HEREDOC
-<?php
-
-$sSignature
- 
-class {$sModule}__{$sClass} extends {$sModule}__{$sClass}_parent {
-
-}
-HEREDOC;
-
-        return $sContent;
-    }
-
-
-    /**
-     * @param $sModule
-     *
-     * @return string
-     *
-     */
-    protected function getMetaDataContent($sModule)
-    {
-        $sSignature = $this->getSignatureContent($sModule);
-        $sVersion = $this->getVersion();
-        $sAuthor = $this->getAuthor();
-        $sUrl = $this->getUrl();
-        $sMail = $this->getMail();
-        $sContent = <<<HEREDOC
-<?php
-
-$sSignature
-
-\$sMetadataVersion = '1.0';
-
-\$aModule = array(
-    'id'            => '$sModule',
-    'title'         => '$sModule',
-    'description'   => '',
-    $sVersion
-    $sAuthor
-    $sUrl
-    $sMail
-
-    'extend'        => array(
-        // Admin
-        
-        //Controllers
-
-        // Core
-
-        // Models
-    ),
-
-    'files'        => array(
-    ),
-
-    'templates'    => array(
-    ),
-
-    'blocks' => array(
-        /*
-        array(
-            'template'  => 'shop_main.tpl',
-            'block'     => 'admin_shop_main_leftform',
-            'file'      => 'views/admin/tpl/admin_shop_main_leftform.tpl'
-        ),
-        */
-    ),
-
-    'settings'     => array(
-    ),
-
-    'events'       => array(
-    ),
-);
-HEREDOC;
-
-        return $sContent;
-    }
-
-
     protected function updateMetadataAddType($sType, $sModule, $sClass)
     {
-        $sMetadataPath = getShopBasePath() . "modules/$sModule/metadata.php";
-        $aModule = array();
-        $sMetadataVersion = 0;
-        include $sMetadataPath;
+        $sModulePath = $this->getModulePath($sModule);
+        $sMetadataPath = $this->getMetadataPath($sModulePath);
+        $aModule = $this->loadMetadataModule($sMetadataPath);
         if (!isset($aModule['extend'][$sClass])) {
             $aModule['extend'][$sClass] = "$sModule/$sType/{$sModule}__{$sClass}";
         }
-        $sContent = "<?php" . PHP_EOL;
-        $sContent .= $this->getSignatureContent($sModule) . PHP_EOL . PHP_EOL;
-        $sContent .= $this->getMetadataContentUpdate($sMetadataVersion, $aModule);
-        $this->writeFile($sMetadataPath, $sContent);
+        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
     }
 
 
     protected function updateMetadataAddBlock($sBlockPath, $sModule, $sBlock)
     {
-        $sMetadataPath = getShopBasePath() . "modules/$sModule/metadata.php";
-        $aModule = array();
-        $sMetadataVersion = 0;
-        include $sMetadataPath;
+        $sModulePath = $this->getModulePath($sModule);
+        $sMetadataPath = $this->getMetadataPath($sModulePath);
+        $aModule = $this->loadMetadataModule($sMetadataPath);
         $aModule['blocks'][] = array(
             'template' => $sBlockPath,
             'block' => $sBlock,
             'file' => "views/blocks/$sBlock.tpl"
         );
+        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
+    }
+
+
+    protected function updateMetadataAddTemplate($sModule, $sFilePath)
+    {
+        $sModulePath = $this->getModulePath($sModule);
+        $sMetadataPath = $this->getMetadataPath($sModulePath);
+        $aModule = $this->loadMetadataModule($sMetadataPath);
+        $aModule['templates'][basename($sFilePath)] = substr($sFilePath, strlen($sModulePath) - strlen($sModule));
+        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
+    }
+
+
+    protected function updateMetadataAddFile($sModule, $sFilePath)
+    {
+        $sModulePath = $this->getModulePath($sModule);
+        $sMetadataPath = $this->getMetadataPath($sModulePath);
+        $aModule = $this->loadMetadataModule($sMetadataPath);
+        $aModule['files'][basename($sFilePath, ".php")] = substr($sFilePath, strlen($sModulePath) - strlen($sModule));
+        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
+    }
+
+
+    /**
+     * @param $sModule
+     * @param $sMetadataVersion
+     * @param $aModule
+     * @param $sMetadataPath
+     */
+    protected function writeMetadataFile($sModule, $sMetadataVersion, $aModule, $sMetadataPath)
+    {
         $sContent = "<?php" . PHP_EOL;
         $sContent .= $this->getSignatureContent($sModule) . PHP_EOL . PHP_EOL;
         $sContent .= $this->getMetadataContentUpdate($sMetadataVersion, $aModule);
@@ -437,6 +404,24 @@ HEREDOC;
     }
 
 
+    protected function getSignatureLink()
+    {
+        return $this->getSignatureLine('link', 'cf_generator_signature_link');
+    }
+
+
+    protected function getSignatureCopyright()
+    {
+        return $this->getSignatureLine('copyright', 'cf_generator_signature_copyright');
+    }
+
+
+    protected function getSignatureAuthor()
+    {
+        return $this->getSignatureLine('author', 'cf_generator_signature_author');
+    }
+
+
     /**
      * @return null|string
      */
@@ -459,24 +444,6 @@ HEREDOC;
         }
 
         return $sLine;
-    }
-
-
-    protected function getSignatureLink()
-    {
-        return $this->getSignatureLine('link', 'cf_generator_signature_link');
-    }
-
-
-    protected function getSignatureCopyright()
-    {
-        return $this->getSignatureLine('copyright', 'cf_generator_signature_copyright');
-    }
-
-
-    protected function getSignatureAuthor()
-    {
-        return $this->getSignatureLine('author', 'cf_generator_signature_author');
     }
 
 
@@ -504,9 +471,7 @@ HEREDOC;
      */
     protected function getModulePath($sModule)
     {
-        $sModulePath = getShopBasePath() . "modules/$sModule";
-
-        return $sModulePath;
+        return getShopBasePath() . "modules/$sModule";
     }
 
 
@@ -518,5 +483,134 @@ HEREDOC;
         return <<<HEREDOC
 [{\$smarty.block.parent}]
 HEREDOC;
+    }
+
+
+    protected function getTemplateContent()
+    {
+        return "";
+    }
+
+
+    protected function getFileContent($sModule, $sClass)
+    {
+        $sSignature = $this->getSignatureContent($sModule);
+        return <<<HEREDOC
+<?php
+
+$sSignature
+ 
+class {$sModule}_{$sClass} {
+
+}
+HEREDOC;
+    }
+
+
+    /**
+     * @param $sModule
+     * @param $sClass
+     *
+     * @return string
+     */
+    protected function getClassContent($sModule, $sClass)
+    {
+        $sSignature = $this->getSignatureContent($sModule);
+        return <<<HEREDOC
+<?php
+
+$sSignature
+ 
+class {$sModule}__{$sClass} extends {$sModule}__{$sClass}_parent {
+
+}
+HEREDOC;
+    }
+
+
+    /**
+     * @param $sModule
+     *
+     * @return string
+     *
+     */
+    protected function getMetaDataContent($sModule)
+    {
+        $sSignature = $this->getSignatureContent($sModule);
+        $sVersion = $this->getVersion();
+        $sAuthor = $this->getAuthor();
+        $sUrl = $this->getUrl();
+        $sMail = $this->getMail();
+        return <<<HEREDOC
+<?php
+
+$sSignature
+
+\$sMetadataVersion = '1.0';
+
+\$aModule = array(
+    'id'            => '$sModule',
+    'title'         => '$sModule',
+    'description'   => '',
+    $sVersion
+    $sAuthor
+    $sUrl
+    $sMail
+
+    'extend'        => array(
+    ),
+
+    'files'        => array(
+    ),
+
+    'templates'    => array(
+    ),
+
+    'blocks' => array(
+    ),
+
+    'settings'     => array(
+    ),
+
+    'events'       => array(
+    ),
+);
+HEREDOC;
+    }
+
+
+    /**
+     * @param $sMetadataPath
+     *
+     * @return array
+     */
+    protected function loadMetadataModule($sMetadataPath)
+    {
+        $aModule = array();
+        include $sMetadataPath;
+
+        return $aModule;
+    }
+
+
+    /**
+     * @param $sModule
+     *
+     * @return string
+     */
+    protected function getMetadataPath($sModulePath)
+    {
+        return $sModulePath . "/metadata.php";
+    }
+
+
+    /**
+     * @param $sTypePath
+     */
+    protected function createDirs($sTypePath)
+    {
+        if (!file_exists($sTypePath)) {
+            mkdir($sTypePath, 0777, true);
+        }
     }
 }
