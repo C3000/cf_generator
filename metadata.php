@@ -36,18 +36,6 @@ $aModule = array(
     ),
 
     'blocks'		=>	array(
-        array('template'  => 'news_main.tpl',
-              'block'     => 'admin_news_main_form',
-              'file'      => 'test1.tpl'),
-        array('template'  => 'page/account/dashboard.tpl',
-              'block'     => 'head_link_favicon',
-              'file'      => 'test2.tpl'),
-        array('template'  => 'layout/base.tpl',
-              'block'     => 'head_link_favicon',
-              'file'      => 'views/blocks/test4.tpl'),
-        array('template'  => 'news_main.tpl',
-              'block'     => 'admin_news_main_form',
-              'file'      => 'views/test3.tpl'),
     ),
 
     'settings'		=>	array(

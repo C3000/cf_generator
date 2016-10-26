@@ -114,7 +114,7 @@ class cf_generator__cf_command_command extends cf_command
         $this->checkModule($sModule);
 
         $sTypePath = $this->getModulePath($sModule) . "/views/";
-        if (strpos($sTemplatePath, 'admin/') !== 0 || strpos($sTemplatePath, '/admin/') === false) {
+        if (strpos($sTemplatePath, 'admin/') !== 0 && strpos($sTemplatePath, '/admin/') === false) {
             $sTypePath .= "tpl/";
         }
 
