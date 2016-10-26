@@ -9,28 +9,46 @@
 class cf_oxid_data_provider
 {
 
-    protected $aTypes;
+    /**
+     * @var null
+     */
+    protected $aTypes = null;
 
-    protected $aBlocks;
+    /**
+     * @var null
+     */
+    protected $aBlocks = null;
 
 
+    /**
+     * @param $sClass
+     *
+     * @return null
+     */
     public function getType(&$sClass)
     {
-        if (isset($this->aTypes[$sClass])) {
-            $sResult = $this->aTypes[$sClass];
+        $aTypes = $this->getTypeList();
+        if (isset($aTypes[$sClass])) {
+            $sResult = $aTypes[$sClass];
         }
         else {
-            $sResult = $this->guessValue($this->aTypes, $sClass, 'Typ');
+            $sResult = $this->guessValue($aTypes, $sClass, 'Typ');
         }
 
         return $sResult;
     }
 
 
+    /**
+     * @param $sBlock
+     *
+     * @return mixed|null
+     */
     public function getBlockPath(&$sBlock)
     {
-        if (isset($this->aBlocks[$sBlock])) {
-            $aResult = $this->aBlocks[$sBlock];
+        $aBlocks = $this->getBlockList();
+        if (isset($aBlocks[$sBlock])) {
+            $aResult = $aBlocks[$sBlock];
             $dCount = count($aResult);
             if ($dCount > 1) {
                 $sResult = $this->getValueFromUser($aResult, 'Block', $dCount);
@@ -40,44 +58,72 @@ class cf_oxid_data_provider
             }
         }
         else {
-            $sResult = $this->guessValue($this->aBlocks, $sBlock, 'Block');
+            $sResult = $this->guessValue($aBlocks, $sBlock, 'Block');
         }
 
         return $sResult;
     }
 
 
+    /**
+     * @param $sBlock
+     *
+     * @return array
+     */
     public function getBlockPaths($sBlock)
     {
         $aResult = array();
 
-        if (isset($this->aBlocks[$sBlock])) {
-            $aResult = $this->aBlocks[$sBlock];
+        $aBlocks = $this->getBlockList();
+        if (isset($aBlocks[$sBlock])) {
+            $aResult = $aBlocks[$sBlock];
         }
 
         return $aResult;
     }
 
 
+    /**
+     * @param $sClass
+     *
+     * @return bool
+     */
     public function hasType($sClass)
     {
-        return isset($this->aTypes[$sClass]);
+        $aTypes = $this->getTypeList();
+        return isset($aTypes[$sClass]);
     }
 
 
+    /**
+     * @param $sBlock
+     *
+     * @return bool
+     */
     public function hasBlock($sBlock)
     {
-        return isset($this->aBlocks[$sBlock]);
+        $aBlocks = $this->getBlockList();
+        return isset($aBlocks[$sBlock]);
     }
 
 
-    public function loadTypes()
+    /**
+     *
+     */
+    protected function loadTypes()
     {
         $this->aTypes = $this->getClasses($this->aTypes, getShopBasePath() . "application");
         $this->aTypes = $this->getClasses($this->aTypes, getShopBasePath() . "core", "core");
     }
 
 
+    /**
+     * @param        $aTypes
+     * @param        $sPath
+     * @param string $sType
+     *
+     * @return mixed
+     */
     protected function getClasses($aTypes, $sPath, $sType = "")
     {
         $dirHandle = opendir($sPath);
@@ -98,13 +144,23 @@ class cf_oxid_data_provider
     }
 
 
-    public function loadBlocks()
+    /**
+     *
+     */
+    protected function loadBlocks()
     {
         $sViewPath = getShopBasePath() . "application/views";
         $this->aBlocks = $this->getBlocks($sViewPath);
     }
 
 
+    /**
+     * @param       $sPath
+     * @param null  $sType
+     * @param array $aBlocks
+     *
+     * @return array|mixed
+     */
     protected function getBlocks($sPath, $sType = null, $aBlocks = array())
     {
         $dirHandle = opendir($sPath);
@@ -134,6 +190,13 @@ class cf_oxid_data_provider
     }
 
 
+    /**
+     * @param $sFilePath
+     * @param $sType
+     * @param $aBlocks
+     *
+     * @return mixed
+     */
     protected function parseBlocks($sFilePath, $sType, $aBlocks)
     {
         $sContent = file_get_contents($sFilePath);
@@ -186,6 +249,13 @@ class cf_oxid_data_provider
     }
 
 
+    /**
+     * @param $aValues
+     * @param $sType
+     * @param $dCount
+     *
+     * @return mixed
+     */
     protected function getValueFromUser($aValues, $sType, $dCount)
     {
         $aValues = array_values($aValues);
@@ -200,5 +270,28 @@ class cf_oxid_data_provider
         }
 
         return $aValues[($iIndex - 1)];
+    }
+
+
+    /**
+     * @return null
+     */
+    protected function getTypeList()
+    {
+        if (!isset($this->aTypes)) {
+            $this->loadTypes();
+        }
+        return $this->aTypes;
+    }
+
+
+    /**
+     * @return null
+     */
+    protected function getBlockList() {
+        if (!isset($this->aBlocks)) {
+            $this->loadBlocks();
+        }
+        return $this->aBlocks;
     }
 }

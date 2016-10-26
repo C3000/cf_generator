@@ -328,7 +328,6 @@ class cf_metadata__cf_command_command extends cf_command
     {
         if (!isset($this->oBlockProvider)) {
             $this->oBlockProvider = oxRegistry::get('cf_oxid_data_provider');
-            $this->oBlockProvider->loadBlocks();
         }
 
         return $this->oBlockProvider;

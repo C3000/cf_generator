@@ -35,13 +35,11 @@ class cf_generator__cf_command_command extends cf_command
         }
         else {
             $oOxidDataProvider = oxRegistry::get('cf_oxid_data_provider');
-            $oOxidDataProvider->loadTypes();
             $sType = $oOxidDataProvider->getType($sClass);
             if (isset($sType)) {
                 $this->generateType($sType, $sModule, $sClass);
             }
             else {
-                $oOxidDataProvider->loadBlocks();
                 $sBlockPath = $oOxidDataProvider->getBlockPath($sClass);
                 if (isset($sBlockPath)) {
                     $this->generateBlock($sBlockPath, $sModule, $sClass);
@@ -149,7 +147,7 @@ class cf_generator__cf_command_command extends cf_command
         if ($this->validFilePath($sTypePath)) {
             $sFilePath = $sTypePath . "{$sModule}_{$sClass}";
             if ($this->fileExists($sFilePath)) {
-                $sContent = $this->getFileContent($sModule, $sClass);
+                $sContent = $this->getFileContent($sModule, basename($sClass, '.php'));
                 $this->writeFile($sFilePath, $sContent);
                 $this->updateMetadataAddFile($sModule, $sFilePath);
             }
@@ -259,8 +257,11 @@ class cf_generator__cf_command_command extends cf_command
                 if ($sKey == 'extend') {
                     $sContent .= $this->writeExtendMetadataArray($oModule);
                 }
-                else {
+                else if ($sKey == 'blocks') {
                     $sContent .= $this->writeMetadataArray($oModule, 2);
+                }
+                else {
+                    $sContent .= $this->writeMetadataArray($oModule, 1);
                 }
                 $sContent .= "\t)," . PHP_EOL;
             }
