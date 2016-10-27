@@ -56,27 +56,12 @@ require_once dirname(__FILE__) . "/../bootstrap.php";
 
 \$oCommand = oxNew('cf_command');
 \$oCommand->run();
-
-/*
-\$aArgs = \$argv;
-// remove cmd name
-array_shift(\$aArgs);
-if (count(\$aArgs) > 0) {
-    \$sModule = strtolower(\$aArgs[0]);
-    \$sClass = isset(\$aArgs[1]) ? strtolower(\$aArgs[1]) : null;
-    new cf_generator(\$sModule, \$sClass);
-}
-else {
-    die('Zu wenig Argumente' . PHP_EOL);
-}
-*/
 HEREDOC;
     }
 
     protected function getSignatureContent($sModule)
     {
         $oNow = new DateTime();
-        $sNow = $oNow->format('d.m.y');
         $sYear = $oNow->format('Y');
 
         return <<<HEREDOC
@@ -84,7 +69,7 @@ HEREDOC;
  * @copyright Copyright$sYear, Markus Lehmann 
  * @author Markus Lehmann <mar_lehmann@hotmail.com>
  * @module $sModule
- * @since $sNow
+ * @since 28.10.2016
  */
 HEREDOC;
     }

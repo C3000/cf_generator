@@ -9,6 +9,9 @@
 class cf_generator__cf_command extends cf_generator__cf_command_parent
 {
 
+    /**
+     *
+     */
     public function configure()
     {
         parent::configure();
@@ -16,9 +19,33 @@ class cf_generator__cf_command extends cf_generator__cf_command_parent
     }
 }
 
+/**
+ * Class cf_generator__cf_command_command
+ */
 class cf_generator__cf_command_command extends cf_command
 {
 
+    /**
+     * @var string|null
+     */
+    protected $sModuelPath = null;
+
+    /**
+     * @var string|null
+     */
+    protected $sModuleApplicationPath = null;
+
+    /**
+     * @var bool|null
+     */
+    protected $blIsApplicationModulePathAvailable = null;
+
+    protected $sTab = '    ';
+
+
+    /**
+     *
+     */
     public function execute()
     {
         $sModule = $this->getArgument(0);
@@ -52,14 +79,20 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param string $sModule
+     *
+     * @return bool
+     */
     protected function generateModule($sModule)
     {
         $blResult = false;
         $sModulePath = $this->getModulePath($sModule);
         if (!file_exists($sModulePath)) {
-            mkdir($sModulePath);
-            $this->writeFile($this->getMetadataPath($sModulePath), $this->getMetaDataContent($sModule));
-            $blResult = true;
+            $blResult = mkdir($sModulePath);
+            $sMetadataPath = $this->getMetadataPath($sModulePath);
+            $sMetadataContent = $this->getMetaDataContent($sModule);
+            $blResult = $blResult && $this->writeFile($sMetadataPath, $sMetadataContent);
         }
 
         return $blResult;
@@ -67,174 +100,171 @@ class cf_generator__cf_command_command extends cf_command
 
 
     /**
-     * @param $sType
-     * @param $sModule
-     * @param $sClass
+     * @param string $sType
+     * @param string $sModule
+     * @param string $sClass
      */
     protected function generateType($sType, $sModule, $sClass)
     {
-        $this->checkModule($sModule);
-
-        $sTypePath = $this->getModulePath($sModule) . "/$sType";
-
-        $this->createDirs($sTypePath);
-
-        if ($this->validFilePath($sTypePath)) {
-            $sFilePath = $sTypePath . "/{$sModule}__{$sClass}.php";
-            if ($this->fileExists($sFilePath)) {
-                $sContent = $this->getClassContent($sModule, $sClass);
-                $this->writeFile($sFilePath, $sContent);
-                $this->updateMetadataAddType($sType, $sModule, $sClass);
-            }
-        }
+        $sFilePath = $this->getFilePath($sModule, $sType, "{$sModule}__{$sClass}.php");
+        $sModulePath = $this->getModulePath($sModule);
+        $sContent = $this->getClassContent($sModule, $sClass);
+        $this->writeFile($sFilePath, $sContent);
+        $sFilePath = $sModule . substr(str_replace($sModulePath, '', $sFilePath), 0, -4);
+        $this->updateMetadataAddFile($sModule, 'extend', $sClass, $sFilePath);
     }
 
 
+    /**
+     * @param string $sBlockPath
+     * @param string $sModule
+     * @param string $sBlock
+     */
     protected function generateBlock($sBlockPath, $sModule, $sBlock)
     {
-        $this->checkModule($sModule);
-
-        $sTypePath = $this->getModulePath($sModule) . "/views/blocks";
-
-        $this->createDirs($sTypePath);
-
-        if ($this->validFilePath($sTypePath)) {
-            $sFilePath = $sTypePath . "/$sBlock.tpl";
-            if ($this->fileExists($sFilePath)) {
-                $sContent = $this->getBlockContent();
-                $this->writeFile($sFilePath, $sContent);
-                $this->updateMetadataAddBlock($sBlockPath, $sModule, $sBlock);
-            }
-        }
+        $sFilePath = $this->getFilePath($sModule, "views/blocks", "$sBlock.tpl");
+        $sContent = $this->getBlockContent();
+        $this->writeFile($sFilePath, $sContent);
+        $this->updateMetadataAddBlock($sBlockPath, $sModule, $sBlock);
     }
 
 
+    /**
+     * @param string $sModule
+     * @param string $sTemplatePath
+     */
     protected function generateTpl($sModule, $sTemplatePath)
     {
-        $this->checkModule($sModule);
-
-        $sTypePath = $this->getModulePath($sModule) . "/views/";
-        if (strpos($sTemplatePath, 'admin/') !== 0 && strpos($sTemplatePath, '/admin/') === false) {
-            $sTypePath .= "tpl/";
-        }
-
         $sTemplate = basename($sTemplatePath);
-        $sTypePath .= substr($sTemplatePath, 0, -1 * strlen($sTemplate));
-
-        $this->createDirs($sTypePath);
-
-        if ($this->validFilePath($sTypePath)) {
-            $sFilePath = $sTypePath . "$sTemplate";
-            if ($this->fileExists($sFilePath)) {
-                $sContent = $this->getTemplateContent();
-                $this->writeFile($sFilePath, $sContent);
-                $this->updateMetadataAddTemplate($sModule, $sFilePath);
-            }
+        $sType = "views/";
+        if (strpos($sTemplatePath, 'admin/') !== 0 && strpos($sTemplatePath, '/admin/') === false) {
+            $sType .= "tpl/";
         }
+        $sType .= substr($sTemplatePath, 0, -1 * (strlen($sTemplate) + 1));
+        $sFilePath = $this->getFilePath($sModule, $sType, $sTemplate);
+        $sContent = $this->getTemplateContent();
+        $this->writeFile($sFilePath, $sContent);
+        $sFilePath = substr($sFilePath, strlen($this->getModulePath($sModule)) - strlen($sModule));
+        $this->updateMetadataAddFile($sModule, 'templates', basename($sFilePath), $sFilePath);
     }
 
 
+    /**
+     * @param string $sModule
+     * @param string $sClassPath
+     */
     protected function generateCustomFile($sModule, $sClassPath)
     {
-        $this->checkModule($sModule);
-
         $sClass = basename($sClassPath);
-        $sClassPath = substr($sClassPath, 0, -1 * strlen($sClass));
-        $sTypePath = $this->getModulePath($sModule) . "/$sClassPath";
-
-        $this->createDirs($sTypePath);
-
-        if ($this->validFilePath($sTypePath)) {
-            $sFilePath = $sTypePath . "{$sModule}_{$sClass}";
-            if ($this->fileExists($sFilePath)) {
-                $sContent = $this->getFileContent($sModule, basename($sClass, '.php'));
-                $this->writeFile($sFilePath, $sContent);
-                $this->updateMetadataAddFile($sModule, $sFilePath);
-            }
-        }
-    }
-
-    protected function validFilePath($sTypePath){
-        return (file_exists($sTypePath) && is_dir($sTypePath) && is_writable($sTypePath)) || die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+        $sClassPath = substr($sClassPath, 0, -1 * (strlen($sClass) + 1));
+        $sFilePath = $this->getFilePath($sModule, $sClassPath, "{$sModule}_{$sClass}");
+        $sContent = $this->getFileContent($sModule, basename($sClass, '.php'));
+        $this->writeFile($sFilePath, $sContent);
+        $sFilePath = substr($sFilePath, strlen($this->getModulePath($sModule)) - strlen($sModule));
+        $this->updateMetadataAddFile($sModule, 'files', basename($sFilePath, '.php'), $sFilePath);
     }
 
 
-    protected function fileExists($sFilePath) {
+    /**
+     * @param string $sTypeDir
+     *
+     * @return bool
+     */
+    protected function validFileDir($sTypeDir)
+    {
+        return (file_exists($sTypeDir) && is_dir($sTypeDir) && is_writable($sTypeDir)) || die("Typpfad existiert nicht oder ist nicht schreibbar" . PHP_EOL);
+    }
+
+
+    /**
+     * @param string $sFilePath
+     *
+     * @return bool
+     */
+    protected function validateFile($sFilePath)
+    {
         return !file_exists($sFilePath) || die("Die Datei existiert bereits: $sFilePath" . PHP_EOL);
     }
 
 
+    /**
+     * @param string $sModule
+     */
     protected function checkModule($sModule)
     {
         $sModulePath = $this->getModulePath($sModule);
-
         $this->generateModule($sModule);
-
         if (!(file_exists($sModulePath) && is_dir($sModulePath) && is_writable($sModulePath))) {
             die("Modulpfad existiert nicht oder ist nicht schreibbar: $sModulePath" . PHP_EOL);
         }
     }
 
 
+    /**
+     * @param string $sFilePath
+     * @param string $sContent
+     *
+     * @return bool
+     */
     protected function writeFile($sFilePath, $sContent)
     {
+        $blResult = false;
         $oFile = fopen($sFilePath, "w");
-        fwrite($oFile, $sContent);
-        fclose($oFile);
-    }
-
-
-    protected function updateMetadataAddType($sType, $sModule, $sClass)
-    {
-        $sModulePath = $this->getModulePath($sModule);
-        $sMetadataPath = $this->getMetadataPath($sModulePath);
-        $aModule = $this->loadMetadataModule($sMetadataPath);
-        if (!isset($aModule['extend'][$sClass])) {
-            $aModule['extend'][$sClass] = "$sModule/$sType/{$sModule}__{$sClass}";
+        if ($oFile !== false) {
+            fwrite($oFile, $sContent);
+            $blResult = fclose($oFile);
         }
-        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
-    }
 
-
-    protected function updateMetadataAddBlock($sBlockPath, $sModule, $sBlock)
-    {
-        $sModulePath = $this->getModulePath($sModule);
-        $sMetadataPath = $this->getMetadataPath($sModulePath);
-        $aModule = $this->loadMetadataModule($sMetadataPath);
-        $aModule['blocks'][] = array(
-            'template' => $sBlockPath,
-            'block' => $sBlock,
-            'file' => "views/blocks/$sBlock.tpl"
-        );
-        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
-    }
-
-
-    protected function updateMetadataAddTemplate($sModule, $sFilePath)
-    {
-        $sModulePath = $this->getModulePath($sModule);
-        $sMetadataPath = $this->getMetadataPath($sModulePath);
-        $aModule = $this->loadMetadataModule($sMetadataPath);
-        $aModule['templates'][basename($sFilePath)] = substr($sFilePath, strlen($sModulePath) - strlen($sModule));
-        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
-    }
-
-
-    protected function updateMetadataAddFile($sModule, $sFilePath)
-    {
-        $sModulePath = $this->getModulePath($sModule);
-        $sMetadataPath = $this->getMetadataPath($sModulePath);
-        $aModule = $this->loadMetadataModule($sMetadataPath);
-        $aModule['files'][basename($sFilePath, ".php")] = substr($sFilePath, strlen($sModulePath) - strlen($sModule));
-        $this->writeMetadataFile($sModule, 0, $aModule, $sMetadataPath);
+        return $blResult;
     }
 
 
     /**
-     * @param $sModule
-     * @param $sMetadataVersion
-     * @param $aModule
-     * @param $sMetadataPath
+     * @param string $sBlockPath
+     * @param string $sModule
+     * @param string $sBlock
+     */
+    protected function updateMetadataAddBlock($sBlockPath, $sModule, $sBlock)
+    {
+        $sFile = "views/blocks/$sBlock.tpl";
+        if ($this->isApplicationModulePathAvailable($this->getModulePath($sModule))) {
+            $sFile = 'application/' . $sFile;
+        }
+        $aContent = array('template' => $sBlockPath,
+                          'block' => $sBlock,
+                          'file' => $sFile);
+        $this->updateMetadataAddFile($sModule, 'blocks', null, $aContent);
+    }
+
+
+    /**
+     * @param string       $sModule
+     * @param string       $sModuleKey
+     * @param string       $sBaseFile
+     * @param array|string $oContent
+     */
+    protected function updateMetadataAddFile($sModule, $sModuleKey, $sBaseFile, $oContent)
+    {
+        $sModulePath = $this->getModulePath($sModule);
+        $sMetadataPath = $this->getMetadataPath($sModulePath);
+        $aModule = $this->loadMetadataModule($sMetadataPath);
+        if (isset($sBaseFile)) {
+            if (!isset($aModule[$sModuleKey][$sBaseFile])) {
+                $aModule[$sModuleKey][$sBaseFile] = $oContent;
+            }
+        }
+        else {
+            $aModule[$sModuleKey][] = $oContent;
+        }
+        $this->writeMetadataFile($sModule, '1.0', $aModule, $sMetadataPath);
+    }
+
+
+    /**
+     * @param string $sModule
+     * @param string $sMetadataVersion
+     * @param array  $aModule
+     * @param string $sMetadataPath
      */
     protected function writeMetadataFile($sModule, $sMetadataVersion, $aModule, $sMetadataPath)
     {
@@ -245,6 +275,12 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param string $sMetadataVersion
+     * @param array  $aModule
+     *
+     * @return string
+     */
     protected function getMetadataContentUpdate($sMetadataVersion, $aModule)
     {
         $sContent = "\$sMetadataVersion = '$sMetadataVersion';" . PHP_EOL . PHP_EOL;
@@ -277,6 +313,12 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param array $aModule
+     * @param int   $dLevel
+     *
+     * @return string
+     */
     protected function writeMetadataArray($aModule, $dLevel = 1)
     {
         $sContent = '';
@@ -301,6 +343,12 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param array  $aModule
+     * @param string $sContent
+     *
+     * @return string
+     */
     protected function writeExtendMetadataArray($aModule, $sContent = '')
     {
         $aExtendModules = $this->getSortedExtendArray($aModule);
@@ -322,6 +370,11 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param array $aModule
+     *
+     * @return array
+     */
     protected function getSortedExtendArray($aModule)
     {
         $oOxidDataGenerator = oxRegistry::get('cf_oxid_data_provider');
@@ -335,6 +388,12 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param double $dLength
+     * @param double $dCountStart
+     *
+     * @return string
+     */
     protected function addTabs($dLength, $dCountStart)
     {
         $dDiff = floor(($dLength - 6) / 4);
@@ -349,6 +408,11 @@ class cf_generator__cf_command_command extends cf_command
     }
 
 
+    /**
+     * @param string $sModule
+     *
+     * @return string
+     */
     protected function getSignatureContent($sModule)
     {
         $oNow = new DateTime();
@@ -374,7 +438,7 @@ HEREDOC;
      */
     protected function getVersion($sVersion = '1.0.0')
     {
-        return "\t'version'\t\t=>\t'$sVersion'," . PHP_EOL;
+        return "{$this->sTab}'version'{$this->sTab}{$this->sTab}=>{$this->sTab}'$sVersion'," . PHP_EOL;
     }
 
 
@@ -405,18 +469,27 @@ HEREDOC;
     }
 
 
+    /**
+     * @return mixed|string
+     */
     protected function getSignatureLink()
     {
         return $this->getSignatureLine('link', 'cf_generator_signature_link');
     }
 
 
+    /**
+     * @return mixed|string
+     */
     protected function getSignatureCopyright()
     {
         return $this->getSignatureLine('copyright', 'cf_generator_signature_copyright');
     }
 
 
+    /**
+     * @return mixed|string
+     */
     protected function getSignatureAuthor()
     {
         return $this->getSignatureLine('author', 'cf_generator_signature_author');
@@ -437,17 +510,29 @@ HEREDOC;
     }
 
 
+    /**
+     * @param string $sName
+     * @param string $sConfigName
+     *
+     * @return mixed|string
+     */
     protected function getModuleSignaturLine($sName, $sConfigName)
     {
         $sLine = $this->getParameter($sConfigName);
         if ($sLine) {
-            $sLine = "\t'$sName'\t\t=>\t'$sLine',";
+            $sLine = "{$this->sTab}'$sName'{$this->sTab}{$this->sTab}=>{$this->sTab}'$sLine',";
         }
 
         return $sLine;
     }
 
 
+    /**
+     * @param string $sName
+     * @param string $sConfigName
+     *
+     * @return mixed|string
+     */
     protected function getSignatureLine($sName, $sConfigName)
     {
         $sLine = $this->getParameter($sConfigName);
@@ -459,6 +544,11 @@ HEREDOC;
     }
 
 
+    /**
+     * @param string $sParamName
+     *
+     * @return mixed
+     */
     protected function getParameter($sParamName)
     {
         return oxRegistry::getConfig()->getConfigParam($sParamName);
@@ -466,13 +556,125 @@ HEREDOC;
 
 
     /**
-     * @param $sModule
+     * @param string $sModule
      *
      * @return string
      */
     protected function getModulePath($sModule)
     {
-        return getShopBasePath() . "modules/$sModule";
+        if (!isset($this->sModuelPath)) {
+            $this->sModuelPath = getShopBasePath() . "modules/$sModule";
+        }
+
+        return $this->sModuelPath;
+    }
+
+
+    /**
+     * @param string $sMetadataPath
+     *
+     * @return array
+     */
+    protected function loadMetadataModule($sMetadataPath)
+    {
+        $aModule = array();
+        include $sMetadataPath;
+
+        return $aModule;
+    }
+
+
+    /**
+     * @param string $sModulePath
+     *
+     * @return string
+     */
+    protected function getMetadataPath($sModulePath)
+    {
+        return $sModulePath . "/metadata.php";
+    }
+
+
+    /**
+     * @param string $sTypePath
+     */
+    protected function createDirs($sTypePath)
+    {
+        if (!file_exists($sTypePath)) {
+            mkdir($sTypePath, 0777, true);
+        }
+    }
+
+
+    /**
+     * @param string $sModulePath
+     *
+     * @return string
+     */
+    protected function getModuleApplicationPath($sModulePath)
+    {
+        if (!isset($this->sModuleApplicationPath)) {
+            if ($this->isApplicationModulePathAvailable($sModulePath)) {
+                $this->sModuleApplicationPath = $sModulePath . '/application';
+            }
+            else {
+                $this->sModuleApplicationPath = $sModulePath;
+            }
+        }
+
+        return $this->sModuleApplicationPath;
+    }
+
+
+    /**
+     * @param string $sModulePath
+     *
+     * @return bool
+     */
+    protected function isApplicationModulePathAvailable($sModulePath)
+    {
+        if (!isset($this->blIsApplicationModulePathAvailable)) {
+            $this->blIsApplicationModulePathAvailable = file_exists($sModulePath . '/application');
+        }
+
+        return $this->blIsApplicationModulePathAvailable;
+    }
+
+
+    /**
+     * @param string $sModule
+     * @param string $sType
+     *
+     * @return string
+     */
+    protected function getTypeDir($sModule, $sType)
+    {
+        $this->checkModule($sModule);
+
+        $sModulePath = $this->getModulePath($sModule);
+        $sApplicationModulePath = $this->getModuleApplicationPath($sModulePath);
+        $sTypeDir = $sApplicationModulePath . $sType;
+
+        $this->createDirs($sTypeDir);
+
+        return $this->validFileDir($sTypeDir) ? $sTypeDir : null;
+    }
+
+
+    /**
+     * @param $sModule
+     * @param $sType
+     * @param $sFile
+     *
+     * @return string
+     */
+    protected function getFilePath($sModule, $sType, $sFile)
+    {
+        $sTypeDir = $this->getTypeDir($sModule, DIRECTORY_SEPARATOR . $sType);
+
+        $sFilePath = $sTypeDir . DIRECTORY_SEPARATOR . $sFile;
+
+        return $this->validateFile($sFilePath) ? $sFilePath : null;
     }
 
 
@@ -487,15 +689,25 @@ HEREDOC;
     }
 
 
+    /**
+     * @return string
+     */
     protected function getTemplateContent()
     {
         return "";
     }
 
 
+    /**
+     * @param string $sModule
+     * @param string $sClass
+     *
+     * @return string
+     */
     protected function getFileContent($sModule, $sClass)
     {
         $sSignature = $this->getSignatureContent($sModule);
+
         return <<<HEREDOC
 <?php
 
@@ -509,14 +721,15 @@ HEREDOC;
 
 
     /**
-     * @param $sModule
-     * @param $sClass
+     * @param string $sModule
+     * @param string $sClass
      *
      * @return string
      */
     protected function getClassContent($sModule, $sClass)
     {
         $sSignature = $this->getSignatureContent($sModule);
+
         return <<<HEREDOC
 <?php
 
@@ -530,7 +743,7 @@ HEREDOC;
 
 
     /**
-     * @param $sModule
+     * @param string $sModule
      *
      * @return string
      *
@@ -542,6 +755,7 @@ HEREDOC;
         $sAuthor = $this->getAuthor();
         $sUrl = $this->getUrl();
         $sMail = $this->getMail();
+
         return <<<HEREDOC
 <?php
 
@@ -577,41 +791,5 @@ $sSignature
     ),
 );
 HEREDOC;
-    }
-
-
-    /**
-     * @param $sMetadataPath
-     *
-     * @return array
-     */
-    protected function loadMetadataModule($sMetadataPath)
-    {
-        $aModule = array();
-        include $sMetadataPath;
-
-        return $aModule;
-    }
-
-
-    /**
-     * @param $sModule
-     *
-     * @return string
-     */
-    protected function getMetadataPath($sModulePath)
-    {
-        return $sModulePath . "/metadata.php";
-    }
-
-
-    /**
-     * @param $sTypePath
-     */
-    protected function createDirs($sTypePath)
-    {
-        if (!file_exists($sTypePath)) {
-            mkdir($sTypePath, 0777, true);
-        }
     }
 }
