@@ -6,7 +6,7 @@ cf_generator is a php srcipt for OXID Shops to generate modules and classes.
 
 * Enable the Module in the master shop
 * Then a file called generator.php is created in the bin folder
-* With this you can generate modules and classes
+* With it you can generate modules and classes
 
 ###Module
     `php bin/generator.php generator cf_test` 
