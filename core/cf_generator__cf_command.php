@@ -270,73 +270,61 @@ class cf_generator__cf_command_command extends cf_command
     {
         $sContent = "<?php" . PHP_EOL;
         $sContent .= $this->getSignatureContent($sModule) . PHP_EOL . PHP_EOL;
-        $sContent .= $this->getMetadataContentUpdate($sMetadataVersion, $aModule);
+        $aModule = array('$sMetadataVersion' => $sMetadataVersion, '$aModule' => $aModule);
+        $sContent .= $this->getMetadataContentUpdate($aModule);
         $this->writeFile($sMetadataPath, $sContent);
     }
 
 
     /**
-     * @param string $sMetadataVersion
-     * @param array  $aModule
+     * @param array $aModule
      *
      * @return string
      */
-    protected function getMetadataContentUpdate($sMetadataVersion, $aModule)
+    protected function getMetadataContentUpdate($aModule)
     {
-        $sContent = "\$sMetadataVersion = '$sMetadataVersion';" . PHP_EOL . PHP_EOL;
-        $sContent .= "\$aModule = array(" . PHP_EOL;
-        foreach ($aModule as $sKey => $oModule) {
-            if (is_array($oModule)) {
-                $sContent .= PHP_EOL . "\t'$sKey'";
-                $sContent .= $this->addTabs(strlen($sKey), 1);
-                $sContent .= "=>\tarray(" . PHP_EOL;
-                if ($sKey == 'extend') {
-                    $sContent .= $this->writeExtendMetadataArray($oModule);
-                }
-                else if ($sKey == 'blocks') {
-                    $sContent .= $this->writeMetadataArray($oModule, 2);
-                }
-                else {
-                    $sContent .= $this->writeMetadataArray($oModule, 1);
-                }
-                $sContent .= "\t)," . PHP_EOL;
-            }
-            else {
-                $sContent .= "\t'$sKey'";
-                $sContent .= $this->addTabs(strlen($sKey), 1);
-                $sContent .= "=>\t'$oModule'," . PHP_EOL;
-            }
-        }
-        $sContent .= ");";
-
-        return $sContent;
+        return $this->writeMetadataArray($aModule, 0, $this->getMaxKeyLength($aModule));
     }
 
 
     /**
      * @param array $aModule
-     * @param int   $dLevel
+     * @param       $dSpaceCount
+     * @param       $dMaxLength
      *
      * @return string
      */
-    protected function writeMetadataArray($aModule, $dLevel = 1)
+    protected function writeMetadataArray(array $aModule, $dSpaceCount, $dMaxLength)
     {
+        $blFirstLevel = $dSpaceCount === 0;
         $sContent = '';
-        foreach ($aModule as $sKey => $oModule) {
-            $sTabs = str_repeat("\t", $dLevel);
-            if (is_array($oModule)) {
-                $sContent .= "{$sTabs}array(" . PHP_EOL;
-                $sContent .= $this->writeMetadataArray($oModule, $dLevel + 1);
-                $sContent .= "{$sTabs})," . PHP_EOL;
+        $sFirstKey = key($aModule);
+        foreach ($aModule as $sKey => $oItem) {
+            if (is_array($oItem)) {
+                if (!is_numeric($sKey)) {
+                    $sContent .= ($blFirstLevel ? '' : PHP_EOL) . str_repeat(' ', $dSpaceCount);
+                    $sContent .= $this->getMetadataKeyLine($dMaxLength, $blFirstLevel, $sKey);
+                }
+                else {
+                    $sContent .= str_repeat(' ', $dSpaceCount);
+                }
+                $sContent .= 'array(' . PHP_EOL;
+                $oItem = $this->modifyMetadataArrayElement($sKey, $oItem, $dSpaceCount);
+                $sContent .= $this->writeMetadataArray($oItem, $dSpaceCount + 4, $this->getMaxKeyLength($oItem));
+                $sContent .= str_repeat(' ', $dSpaceCount) . ')' . ($blFirstLevel ? ';' : ',');
             }
             else {
-                $dMax = strlen(array_reduce(array_keys($aModule), function ($k, $v) {
-                    return (strlen($k) > strlen($v)) ? $k : $v;
-                }));
-                $sContent .= "{$sTabs}\t'$sKey'";
-                $sContent .= $this->addTabs(strlen($sKey), round(($dMax - 2) / 4));
-                $sContent .= "=>\t'$oModule'," . PHP_EOL;
+                $blIsComment = strpos($sKey, '//') === 0;
+                if ($blIsComment && $sFirstKey != $sKey) {
+                    $sContent .= PHP_EOL;
+                }
+                $sContent .= str_repeat(' ', $dSpaceCount);
+                $sContent .= $this->getMetadataKeyLine($dMaxLength, $blFirstLevel, $sKey, $blIsComment);
+                if (!$blIsComment) {
+                    $sContent .= "'$oItem'" . ($blFirstLevel ? ';' . PHP_EOL : ',');
+                }
             }
+            $sContent .= PHP_EOL;
         }
 
         return $sContent;
@@ -344,29 +332,73 @@ class cf_generator__cf_command_command extends cf_command
 
 
     /**
-     * @param array  $aModule
-     * @param string $sContent
+     * @param $aArray
+     *
+     * @return int
+     */
+    protected function getMaxKeyLength($aArray)
+    {
+        $dMaxLength = strlen(array_reduce(array_keys($aArray), function ($k, $v) {
+            return (strlen($k) > strlen($v)) ? $k : $v;
+        }));
+
+        $dRest = $dMaxLength % 4;
+        $dMaxLength += 4 - $dRest;
+
+        return $dMaxLength;
+    }
+
+
+    /**
+     * @param $dMaxLength
+     * @param $sKey
      *
      * @return string
      */
-    protected function writeExtendMetadataArray($aModule, $sContent = '')
+    protected function getSpaces($dMaxLength, $sKey)
     {
-        $aExtendModules = $this->getSortedExtendArray($aModule);
-        ksort($aExtendModules);
-        $dMax = strlen(array_reduce(array_keys($aModule), function ($k, $v) {
-            return (strlen($k) > strlen($v)) ? $k : $v;
-        }));
-        foreach ($aExtendModules as $sKey => $aModules) {
-            asort($aModules);
-            $sContent .= (strlen($sContent) == 0 ? '' : PHP_EOL) . "\t\t// $sKey" . PHP_EOL;
-            foreach ($aModules as $sClass => $sPath) {
-                $sContent .= "\t\t'$sClass'";
-                $sContent .= $this->addTabs(strlen($sClass), round(($dMax - 2) / 4));
-                $sContent .= "=>\t'$sPath'," . PHP_EOL;
+        $dSpaces = $dMaxLength - strlen($sKey);
+        return $dSpaces > 0 ? str_repeat(' ', $dMaxLength - strlen($sKey)) : '';
+    }
+
+
+    /**
+     * @param      $dMaxLength
+     * @param      $blFirstLevel
+     * @param      $sKey
+     * @param bool $blIsComment
+     *
+     * @return string
+     */
+    protected function getMetadataKeyLine($dMaxLength, $blFirstLevel, $sKey, $blIsComment = false)
+    {
+        $sContent = '';
+        if ($blFirstLevel || !is_numeric($sKey)) {
+            $sContent = ($blFirstLevel || $blIsComment ? $sKey : "'$sKey'");
+            if (!$blIsComment) {
+                $sContent .= $this->getSpaces($dMaxLength, $sKey);
+                $sContent .= ($blFirstLevel ? '=  ' : '=>  ');
             }
         }
-
         return $sContent;
+    }
+
+
+    protected function modifyMetadataArrayElement($sModuleKey, $aModuleValues, $dSpaceCount)
+    {
+        if ($sModuleKey == 'extend' && $dSpaceCount == 4) {
+            $aExtendValues = array();
+            $aExtendModules = $this->getSortedExtendArray($aModuleValues);
+            ksort($aExtendModules);
+            foreach ($aExtendModules as $sKey => $aModules) {
+                asort($aModules);
+                $aExtendValues["//$sKey"] = '';
+                $aExtendValues += $aModules;
+            }
+            $aModuleValues = $aExtendValues;
+        }
+
+        return $aModuleValues;
     }
 
 
@@ -385,26 +417,6 @@ class cf_generator__cf_command_command extends cf_command
         }
 
         return $aResult;
-    }
-
-
-    /**
-     * @param double $dLength
-     * @param double $dCountStart
-     *
-     * @return string
-     */
-    protected function addTabs($dLength, $dCountStart)
-    {
-        $dDiff = floor(($dLength - 6) / 4);
-        $dCount = $dCountStart - $dDiff;
-
-        $sContent = '';
-        for ($i = 0; $i <= $dCount; $i++) {
-            $sContent .= "\t";
-        }
-
-        return $sContent;
     }
 
 

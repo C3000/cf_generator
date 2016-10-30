@@ -230,7 +230,8 @@ class cf_oxid_data_provider
     {
         $aKeys = array_keys($aHaystack);
         $aResult = array_filter($aKeys, function ($element) use ($sNeedle) {
-            return preg_match('/^' . $sNeedle . '.*/', $element);
+            $sPregMatch = '/^' . preg_quote($sNeedle, '/') . '.*/';
+            return preg_match($sPregMatch, $element);
         });
         $dCount = count($aResult);
         if ($dCount == 1) {

@@ -38,14 +38,14 @@ class cf_generator_events
         return $sBinDir . '/generator.php';
     }
 
-    protected function writeFile($sFilePath, $sContent)
+    protected static function writeFile($sFilePath, $sContent)
     {
         $oFile = fopen($sFilePath, "w");
         fwrite($oFile, $sContent);
         fclose($oFile);
     }
 
-    protected function getGeneratorFileContent() {
+    protected static function getGeneratorFileContent() {
         $sSignature = self::getSignatureContent('cf_generator');
         return <<<HEREDOC
 <?php
@@ -59,7 +59,7 @@ require_once dirname(__FILE__) . "/../bootstrap.php";
 HEREDOC;
     }
 
-    protected function getSignatureContent($sModule)
+    protected static function getSignatureContent($sModule)
     {
         $oNow = new DateTime();
         $sYear = $oNow->format('Y');
